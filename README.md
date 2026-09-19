@@ -3,6 +3,8 @@
 Code accompanying **M. Franco and E. Calzetta, _Non-additive surface and volume backscattering
 from a rough interface over a correlated random medium_**.
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22832455.svg)](https://doi.org/10.5281/zenodo.22832455)
+
 The paper computes the first-order incoherent backscattering cross-section of a random rough
 surface bounding a half-space whose permittivity fluctuates randomly, in the case where the two
 random fields are **correlated**, so that surface and volume scattering are not additive. A
