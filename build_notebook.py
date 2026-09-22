@@ -147,6 +147,20 @@ def eta(theta, canal="VV", **kw):
     '''Fractional departure from additivity: I_cross / (I_rough + I_diel).'''
     r, d, c = contributions(theta, **kw)[canal]
     return c/(r+d)
+
+def sigma0(theta, canal="VV", ki=Ki, **kw):
+    '''sigma0_QQ up to the common factor 4*pi/A (eq. sigma0_working): the HH and
+    VV building blocks returned by contributions() carry *different* channel
+    prefactors (2*K0 for HH, K0^4|T_V|^2/k^4 for VV -- see eq. Ehat_def), so the
+    raw HH and VV outputs of contributions() are NOT on a comparable scale and
+    must not be plotted against each other directly.  This is what actually
+    converts them into (a multiple of) the physical cross-section.'''
+    out = contributions(theta, ki=ki, **kw)
+    r, d, c = out[canal]
+    tot = r+d+c
+    if canal == "HH":
+        return 2*np.pi*out["K0"]*tot
+    return np.pi*out["K0"]**4*np.abs(out["TV"])**2/out["k"]**4*tot
 print("ready")
 """)
 
@@ -171,16 +185,25 @@ for e in [4+0j, 15+3j, 30+10j, 2.5+0.1j]:
 md(r"""
 ## 3 · Where each contribution lives
 
-The three contributions against incidence angle. The cross term is $2\Re\{\cdots\}$:
-**it has a sign**, and can either enhance or suppress the backscatter. Its absolute value is
-plotted, with the sign indicated.
+The three contributions against incidence angle, converted to (a common multiple of) the
+actual cross-section $\sigma^0$ via `sigma0()` -- **not** the raw building blocks
+`contributions()` returns. HH and VV carry *different* channel prefactors
+($2K_0$ vs. $K_0^4|T_V|^2/k^4$, eq. `Ehat_def`), so plotting the two channels' raw outputs
+against each other is comparing different scales: the raw VV building blocks vanish as
+$k\to0$ (normal incidence) purely because of the missing $1/k^4$, even though the physical
+$\sigma^0_{VV}$ does not (see the check below). The cross term is $2\Re\{\cdots\}$: **it has a
+sign**, and can either enhance or suppress the backscatter. Its absolute value is plotted,
+with the sign indicated.
 """)
 
 co(r"""
 th_d = np.linspace(5, 75, 400); th = np.radians(th_d)
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.0), constrained_layout=True)
 for ax, ch in zip(axes, ["HH", "VV"]):
-    r, d, c = contributions(th)[ch]
+    out = contributions(th)
+    r, d, c = out[ch]
+    pref = 2*out["K0"] if ch == "HH" else out["K0"]**4*np.abs(out["TV"])**2/out["k"]**4
+    r, d, c = r*pref, d*pref, c*pref
     ax.semilogy(th_d, r, color=SER[0], label="roughness")
     ax.semilogy(th_d, d, color=SER[1], label="dielectric")
     ax.semilogy(th_d, np.abs(c), color=SER[2], label="cross  $|I_{\\rm cross}|$")
@@ -192,7 +215,7 @@ for ax, ch in zip(axes, ["HH", "VV"]):
     ax.set_xlabel("incidence angle  $\\theta$  [deg]")
     ax.grid(True, which="major", axis="y")
     ax.set_axisbelow(True)
-axes[0].set_ylabel("contribution to  $\\langle|\\chi^{(1)}|^2\\rangle/\\mathcal{A}$")
+axes[0].set_ylabel("contribution to  $\\sigma^0$  [common arbitrary reference]")
 axes[1].legend(loc="center right")
 if any((contributions(th)[c][2] < 0).any() for c in ("HH", "VV")):
     axes[1].text(0.02, 0.06, "dotted line: cross term negative",
@@ -200,6 +223,14 @@ if any((contributions(th)[c][2] < 0).any() for c in ("HH", "VV")):
 fig.suptitle("The three first-order contributions", x=0.006, ha="left",
              fontsize=12.5, fontweight="semibold", color=INK)
 plt.show()
+
+# Sanity check: at normal incidence there is no distinction between polarizations,
+# so sigma0_HH must equal sigma0_VV exactly. The *unnormalised* contributions()
+# building blocks do not satisfy this (VV artificially vanishes as theta -> 0);
+# sigma0() does, which is itself a check on the K0/TV prefactor used above.
+th0 = np.radians([1.0, 0.1, 0.01])
+ratio = sigma0(th0, "HH")/sigma0(th0, "VV")
+print(f"  sigma0_HH/sigma0_VV at theta = 1, 0.1, 0.01 deg: {np.round(ratio, 6)}")
 """)
 
 md(r"""

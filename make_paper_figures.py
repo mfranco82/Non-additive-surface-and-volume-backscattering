@@ -391,6 +391,16 @@ for e in [15 + 3j, 30 + 10j, 2.5 + 0.1j]:
           f"HH ratio in [{ratio_HH.min():.6f},{ratio_HH.max():.6f}]  "
           f"VV ratio in [{ratio_VV.min():.6f},{ratio_VV.max():.6f}]")
 
+# a second, independent check on the channel prefactors of sigma0(): at normal
+# incidence there is no distinction between polarizations, so sigma0_HH must
+# equal sigma0_VV exactly.  (The unnormalised contributions() building blocks
+# do not satisfy this on their own -- VV vanishes as theta -> 0 there, purely
+# from the missing 1/k^4 -- which is precisely why contributions() must never
+# be compared across channels without going through sigma0() first.)
+th0 = np.radians([1.0, 0.1, 0.01])
+ratio_normal = sigma0(th0, "HH") / sigma0(th0, "VV")
+print(f"  sigma0_HH/sigma0_VV at theta = 1, 0.1, 0.01 deg: {np.round(ratio_normal, 6)}")
+
 # eta extremes at rho0 = +-1
 for ch in ("HH", "VV"):
     ep = eta(th, ch, rho0=1.0)
