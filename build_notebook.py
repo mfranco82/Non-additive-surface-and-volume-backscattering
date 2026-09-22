@@ -32,22 +32,22 @@ This notebook quantifies when that term matters.
 
 **VV channel** (eq. 5.11 of the manuscript), with the exact geometric amplitude
 
-$$I_{VV}=\frac{4R_V}{T_V}k^2+\frac{2\epsilon_1(\epsilon_1-1)k^4}{K_t^2}T_V$$
+$$I_{VV}=\frac{4R_V}{T_V}k^2+\frac{2\epsilon_1(\epsilon_1-1)k^4}{K_1^2}T_V$$
 
 $$\frac{\langle|\psi^{(1)}|^2\rangle}{\mathcal{A}}
 =|I_{VV}|^2W_h
-+\frac{|\epsilon_1|^2k_0^4k^4|T_V|^2}{|K_t|^4}\,\Omega_\varepsilon
-+2\,\Re\!\left\{I_{VV}\frac{\epsilon_1^*k_0^2k^2T_V^*}{(K_t^*)^2}\,\Omega_{h\varepsilon}\right\}$$
++\frac{|\epsilon_1|^2k_i^4k^4|T_V|^2}{|K_1|^4}\,\Omega_\varepsilon
++2\,\Re\!\left\{I_{VV}\frac{\epsilon_1^*k_i^2k^2T_V^*}{(K_1^*)^2}\,\Omega_{h\varepsilon}\right\}$$
 
 **HH channel** (eq. 5.3)
 
 $$\frac{\langle|\varphi^{(1)}|^2\rangle}{\mathcal{A}}
-=8K^3|R_H|^2W_h
-+\frac{k_0^4|T_H|^4}{4|K_t|K_t''}\,\Omega_\varepsilon
--2\,\Re\!\left\{\frac{2k_0^2K^2R_H(T_H^*)^2}{\sqrt{K K_t^*}}\,\Omega_{h\varepsilon}\right\}$$
+=8K^3_0|R_H|^2W_h
++\frac{k_i^4|T_H|^4}{4 K_0 K_1''}\,\Omega_\varepsilon
+-2\,\Re\!\left\{2k_i^2K_0R_H(T_H^*)^2\,\Omega_{h\varepsilon}\right\}$$
 
-with $\Omega_\varepsilon=\frac{s_\varepsilon^2l_r^2}{4\pi}e^{-(kl_r)^2}\frac{l_v}{1+2K_t'l_v}$,
-$\Omega_{h\varepsilon}=\rho_0\frac{s_\varepsilon s L_r^2}{4\pi}e^{-(kL_r)^2}\frac{L_v}{1+2L_v(K_t''+\imath K_t')}$,
+with $\Omega_\varepsilon=\frac{s_\varepsilon^2l_r^2}{4\pi}e^{-(kl_r)^2}\frac{l_v}{1+2K_1'l_v}$,
+$\Omega_{h\varepsilon}=\rho_0\frac{s_\varepsilon s L_r^2}{4\pi}e^{-(kL_r)^2}\frac{L_v}{1+2L_v(K_1''+\imath K_1')}$,
 and $W_h=\frac{s^2l^2}{4\pi}e^{-(kl)^2}$.
 """)
 
@@ -90,33 +90,33 @@ print("ready")
 md("## 1 · Model")
 
 co(r"""
-LAM = 1.0                 # longitud de onda (todas las longitudes en unidades de lambda)
-K0  = 2*np.pi/LAM
+LAM = 1.0                 # lambda: incident wavelength  (all length in lambda units)
+Ki  = 2*np.pi/LAM
 
-def fresnel(theta, eps1, k0=K0):
-    '''Returns k, K, Kt, R_V, T_V, R_H, T_H. theta in radians. Branch Im(Kt)>0.'''
+def fresnel(theta, eps1, ki=Ki):
+    '''Returns k, K0, K1, R_V, T_V, R_H, T_H. theta in radians. Branch Im(K1)>0.'''
     theta = np.asarray(theta, dtype=float)
     eps1  = np.asarray(eps1, dtype=complex)
-    k = k0*np.sin(theta)
-    K = k0*np.cos(theta)
-    Kt = np.sqrt(eps1*k0**2 - k**2 + 0j)
-    Kt = np.where(Kt.imag < 0, -Kt, Kt)        # K_t'' > 0
-    RV = (eps1*K - Kt)/(eps1*K + Kt);  TV = 1 - RV
-    RH = (K - Kt)/(K + Kt);            TH = 1 + RH
-    return k, K, Kt, RV, TV, RH, TH
+    k = ki*np.sin(theta)
+    K0 = ki*np.cos(theta)
+    K1 = np.sqrt(eps1*ki**2 - k**2 + 0j)
+    K1 = np.where(K1.imag < 0, -K1, K1)        # K_1'' > 0
+    RV = (eps1*K0 - K1)/(eps1*K0 + K1);  TV = 1 - RV
+    RH = (K0 - K1)/(K0 + K1);            TH = 1 + RH
+    return k, K0, K1, RV, TV, RH, TH
 
-def I_VV_amp(theta, eps1, k0=K0):
-    '''Exact geometric amplitude of the VV channel (eq. A.17).'''
-    k, K, Kt, RV, TV, _, _ = fresnel(theta, eps1, k0)
-    return 4*RV/TV*k**2 + 2*eps1*(eps1-1)*k**4/Kt**2*TV
+def I_VV_amp(theta, eps1, ki=Ki):
+    '''Exact geometric amplitude of the VV channel (eq. A.41).'''
+    k, K0, K1, RV, TV, _, _ = fresnel(theta, eps1, ki)
+    return 4*RV/TV*k**2 + 2*eps1*(eps1-1)*k**4/K1**2*TV
 
-# Defaults: moist soil at L band, roughness inside the SPM regime (k0*s << 1).
+# Defaults: moist soil at L band, roughness inside the SPM regime (ki*s << 1).
 # s and s_eps are chosen so that the two mechanisms are *balanced* (see §4): the cross
 # term is a geometric mean, hence largest when I_rough ~ I_diel.
 P0 = dict(eps1=15+3j, s=0.015, l=0.5, seps=4.0, lr=0.5, lv=0.20,
           rho0=0.5,  Lr=0.5, Lv=0.03)
 
-def contributions(theta, k0=K0, **kw):
+def contributions(theta, ki=Ki, **kw):
     '''Returns a dict with the three contributions of each channel.
     Each entry is an array with the broadcast shape of theta and the parameters.'''
     p = {**P0, **kw}
@@ -124,24 +124,24 @@ def contributions(theta, k0=K0, **kw):
     s, l, seps, lr, lv = p["s"], p["l"], p["seps"], p["lr"], p["lv"]
     rho0, Lr, Lv = p["rho0"], p["Lr"], p["Lv"]
 
-    k, K, Kt, RV, TV, RH, TH = fresnel(theta, eps1, k0)
-    Ktp, Ktpp = Kt.real, Kt.imag
-    IVV = 4*RV/TV*k**2 + 2*eps1*(eps1-1)*k**4/Kt**2*TV
+    k, K0, K1, RV, TV, RH, TH = fresnel(theta, eps1, ki)
+    K1p, K1pp = K1.real, K1.imag
+    IVV = 4*RV/TV*k**2 + 2*eps1*(eps1-1)*k**4/K1**2*TV
 
     Wh   = s**2*l**2/(4*np.pi)*np.exp(-(k*l)**2)
-    Om_e = seps**2*lr**2/(4*np.pi)*np.exp(-(k*lr)**2) * lv/(1+2*Ktp*lv)
-    Om_he= rho0*seps*s*Lr**2/(4*np.pi)*np.exp(-(k*Lr)**2) * Lv/(1+2*Lv*(Ktpp+1j*Ktp))
+    Om_e = seps**2*lr**2/(4*np.pi)*np.exp(-(k*lr)**2) * lv/(1+2*K1p*lv)
+    Om_he= rho0*seps*s*Lr**2/(4*np.pi)*np.exp(-(k*Lr)**2) * Lv/(1+2*Lv*(K1pp+1j*K1p))
 
-    hh_r = 8*K**3*np.abs(RH)**2 * Wh
-    hh_d = k0**4*np.abs(TH)**4/(4*np.abs(Kt)*Ktpp) * Om_e
-    hh_c = -2*np.real(2*k0**2*K**2*RH*np.conj(TH)**2/np.sqrt(K*np.conj(Kt)) * Om_he)
+    hh_r = 8*K0**3*np.abs(RH)**2 * Wh
+    hh_d = ki**4*np.abs(TH)**4/(4*K0*K1pp) * Om_e
+    hh_c = -2*np.real(2*ki**2*K0*RH*np.conj(TH)**2 * Om_he)
 
     vv_r = np.abs(IVV)**2 * Wh
-    vv_d = np.abs(eps1)**2*k0**4*k**4*np.abs(TV)**2/np.abs(Kt)**4 * Om_e/(2*Ktpp)
-    vv_c = 2*np.real(IVV*np.conj(eps1)*k0**2*k**2*np.conj(TV)/np.conj(Kt)**2 * Om_he)
+    vv_d = np.abs(eps1)**2*ki**4*k**4*np.abs(TV)**2/np.abs(K1)**4 * Om_e/(2*K1pp)
+    vv_c = 2*np.real(IVV*np.conj(eps1)*ki**2*k**2*np.conj(TV)/np.conj(K1)**2 * Om_he)
 
     return dict(HH=(hh_r, hh_d, hh_c), VV=(vv_r, vv_d, vv_c),
-                K=K, k=k, Kt=Kt, TV=TV, IVV=IVV)
+                K0=K0, k=k, K1=K1, TV=TV, IVV=IVV)
 
 def eta(theta, canal="VV", **kw):
     '''Fractional departure from additivity: I_cross / (I_rough + I_diel).'''
@@ -161,9 +161,9 @@ $\epsilon_1$. The residual should be zero to machine precision.
 co(r"""
 th = np.radians(np.linspace(1, 89, 400))
 for e in [4+0j, 15+3j, 30+10j, 2.5+0.1j]:
-    k, K, Kt, RV, TV, _, _ = fresnel(th, e)
-    EVV_hat = -(K*TV/(2*k**2)) * I_VV_amp(th, e)            # unit incident amplitude
-    EVV_spm = 2*K*(e-1)/(e*K+Kt)**2 * (Kt**2 + e*k**2)      # SPM kernel
+    k, K0, K1, RV, TV, _, _ = fresnel(th, e)
+    EVV_hat = -(K0*TV/(2*k**2)) * I_VV_amp(th, e)            # unit incident amplitude
+    EVV_spm = 2*K0*(e-1)/(e*K0+K1)**2 * (K1**2 + e*k**2)      # SPM kernel
     res = np.max(np.abs(EVV_hat/EVV_spm + 1))
     print(f"  eps1 = {e!s:>12}   max |Ehat/SPM + 1| = {res:.2e}")
 """)
@@ -262,17 +262,17 @@ plt.show()
 md(r"""
 ### The two physical conditions
 
-**Loss.** $\epsilon_1''$ fixes $K_t''$, which controls how deep the wave sees the medium. The
-dielectric term integrates the whole illuminated volume ($\propto1/K_t''$), whereas the cross
+**Loss.** $\epsilon_1''$ fixes $K_1''$, which controls how deep the wave sees the medium. The
+dielectric term integrates the whole illuminated volume ($\propto1/K_1''$), whereas the cross
 term only weighs the layer $|\zeta|\lesssim L_v$ adjacent to the interface. As the loss grows
 the volume term is extinguished and the near-surface coupling is left exposed.
 
-**Correlation depth.** $\Omega_{h\varepsilon}\propto L_v/[1+2L_v(K_t''+\imath K_t')]$ has a
+**Correlation depth.** $\Omega_{h\varepsilon}\propto L_v/[1+2L_v(K_1''+\imath K_1')]$ has a
 **ridge**: if $L_v$ is very small there is not enough correlated volume; if it is very large, the
-phase $2L_vK_t'$ rotates across the layer and the deep contributions cancel against each other.
+phase $2L_vK_1'$ rotates across the layer and the deep contributions cancel against each other.
 Careful: as $L_v$ grows the effect **does not fall to zero but to a plateau** — the modulus of
-$\Omega_{h\varepsilon}$ saturates at $1/(2|K_t|)$, because the layer within one coherence length
-of the interface always contributes. The ridge sits at $2L_v|K_t|\sim1$ (numerically between
+$\Omega_{h\varepsilon}$ saturates at $1/(2|K_1|)$, because the layer within one coherence length
+of the interface always contributes. The ridge sits at $2L_v|K_1|\sim1$ (numerically between
 $1.1$ and $1.5$ for $\epsilon_1''/\epsilon_1'\lesssim0.2$) and its height above the plateau
 depends on the loss: a factor of $5$ for $\epsilon_1''=1$, a factor of $2$ for
 $\epsilon_1''=3$, and it washes out by $\epsilon_1''=10$, when the wave is absorbed before the
@@ -298,10 +298,10 @@ im2 = heatmap(axes[1], TH2, LV, Z2, "incidence angle  $\\theta$  [deg]",
               "correlation depth  $L_v\\ [\\lambda]$",
               "VV — the ridge in $L_v$")
 axes[1].set_yscale("log")
-# the coherence condition 2 L_v |K_t| = 1
-_, _, Kt_, _, _, _, _ = fresnel(np.radians(th_d), 15+3j)
-axes[1].plot(th_d, 1/(2*np.abs(Kt_)), color=INK, lw=1.4, ls=(0, (5, 2)))
-axes[1].text(0.97, 0.08, "$2L_v|K_t| = 1$", transform=axes[1].transAxes,
+# the coherence condition 2 L_v |K_1| = 1
+_, _, K1_, _, _, _, _ = fresnel(np.radians(th_d), 15+3j)
+axes[1].plot(th_d, 1/(2*np.abs(K1_)), color=INK, lw=1.4, ls=(0, (5, 2)))
+axes[1].text(0.97, 0.08, "$2L_v|K_1| = 1$", transform=axes[1].transAxes,
              ha="right", color=INK, fontsize=9)
 
 fig.colorbar(im, ax=axes[0], label="$\\eta$", shrink=0.9, pad=0.02,
@@ -330,8 +330,9 @@ bias is substantially larger than $\eta$, and why it **grows when the dielectric
 
 > **A negative result, also useful.** We first tried the polarization ratio
 > $\sigma^0_{VV}/\sigma^0_{HH}$ as an observable. It does not work: the coupling displaces both
-> channels by a similar amount and the effect cancels in the quotient (less than $0.25$ dB, below
-> typical calibration accuracy). Worth knowing before designing a campaign.
+> channels by a similar amount and the effect cancels in the quotient (below $0.10$ dB over the
+> whole domain, an order of magnitude below typical calibration accuracy). Worth knowing before
+> designing a campaign.
 """)
 
 co(r"""
@@ -428,22 +429,17 @@ md(r"""
 The exact geometric amplitude has two pieces,
 
 $$I_{VV}=\underbrace{\frac{4R_V}{T_V}k^2}_{\rm (a)}
-+\underbrace{\frac{2\epsilon_1(\epsilon_1-1)k^4}{K_t^2}T_V}_{\rm (b)}$$
++\underbrace{\frac{2\epsilon_1(\epsilon_1-1)k^4}{K_1^2}T_V}_{\rm (b)}$$
 
-The second one was **missing** in an earlier version of the calculation: it originates in the
-boundary value $[\Psi^{(0)}(0)]^2$ and it is the only one carrying the factor
-$(\epsilon_1-1)$ and the double pole $1/(\epsilon_1K+K_t)^2$ that the SPM requires. The map
-shows its relative weight — and therefore where the earlier, approximate evaluation was most
-wrong.
 """)
 
 co(r"""
 th_d = np.linspace(5, 75, 220); epr = np.logspace(0.15, 1.8, 220)   # eps1' from ~1.4 to ~63
 TH, EPR = np.meshgrid(th_d, epr)
 e = EPR + 3j
-k, K, Kt, RV, TV, _, _ = fresnel(np.radians(TH), e)
+k, K0, K1, RV, TV, _, _ = fresnel(np.radians(TH), e)
 a = 4*RV/TV*k**2
-b = 2*e*(e-1)*k**4/Kt**2*TV
+b = 2*e*(e-1)*k**4/K1**2*TV
 W = np.abs(b)/(np.abs(a)+np.abs(b))
 
 fig, ax = plt.subplots(figsize=(6.2, 4.4), constrained_layout=True)
@@ -476,7 +472,7 @@ md(r"""
    reproduce that even qualitatively.
 
 3. **Two conditions govern when it matters.** One of *balance* ($I_{\rm rough}\sim I_{\rm diel}$,
-   because the cross term is a geometric mean) and one of *coherence* ($2L_v|K_t|\sim1$: the
+   because the cross term is a geometric mean) and one of *coherence* ($2L_v|K_1|\sim1$: the
    correlated layer has to be thick enough to contribute, but not so thick that the phase rotates
    within it). Outside the first the effect is buried; outside the second, on the large-$L_v$
    side, it drops to a plateau of roughly half the ridge, not to zero.
@@ -497,10 +493,10 @@ md(r"""
 - **Inversion**: given $(\sigma^0_{VV},\sigma^0_{HH})$ at several angles, can $\rho_0$ be
   recovered? A map of the Fisher matrix or of the estimation error would say whether the problem
   is well conditioned.
-- **Frequency dependence**: sweeping $k_0$ with the correlation lengths fixed in physical units
+- **Frequency dependence**: sweeping $k_i$ with the correlation lengths fixed in physical units
   separates $l$ from $l_r$, because the factors $e^{-(kl)^2}$ and $e^{-(kl_r)^2}$ scale
   differently. This is also where the coherence condition becomes an observable.
-- **Region of validity**: a contour of $k_0s$ and $s/l$ where the first-order expansion still
+- **Region of validity**: a contour of $k_is$ and $s/l$ where the first-order expansion still
   holds, overlaid on the maps above.
 - **Real targets**: replace $\epsilon_1$ by a soil dielectric model (e.g. Dobson) and sweep
   moisture instead of an abstract $\epsilon_1$.

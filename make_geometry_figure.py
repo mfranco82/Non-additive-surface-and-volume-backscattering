@@ -153,3 +153,20 @@ fig.savefig(os.path.join(OUT, "chg_coord.png"))
 plt.close(fig)
 print("wrote", os.path.join(OUT, "chg_coord.png"))
 print(f"  surface: rms = {h.std():.4f}, max |dh/dx| = {np.abs(np.gradient(h, dx)).max():.3f}")
+
+
+# --------------------------------------------------------------------------------
+# Convenience for the authors: keep the manuscript's copy of the figures in sync, so
+# that editing a figure here cannot leave a stale one in the paper.  The repository
+# is self-contained without this; the block is a no-op when the manuscript tree is
+# not present alongside it.
+# --------------------------------------------------------------------------------
+_MS = os.path.normpath(os.path.join(OUT, os.pardir, os.pardir, "manuscript", "figures"))
+if os.path.isdir(_MS):
+    import shutil
+    _n = 0
+    for _f in sorted(os.listdir(OUT)):
+        if _f.endswith(".png"):
+            shutil.copy2(os.path.join(OUT, _f), os.path.join(_MS, _f))
+            _n += 1
+    print(f"  {_n} figures mirrored to {_MS}")
