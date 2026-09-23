@@ -27,7 +27,12 @@ $$z = \zeta + \gamma(\vec x,\zeta)\,,\qquad \gamma(\vec x,\zeta)=h(\vec x)\,f(\z
 
 with the gauge conditions of eq. (2.6),
 
-$$f(0)=1\,,\qquad f'(0)=0\,,\qquad f(\zeta)\to0 \ \text{ as }\ \zeta\to\pm\infty\,.$$
+$$f(0)=1\,,\qquad f(\zeta)\to0 \ \text{ as }\ \zeta\to\pm\infty\,,$$
+
+$f$ being continuously differentiable at $\zeta=0$. Nothing below actually uses them:
+$f$ is carried as a generic `Function('f')(z)` from start to finish, so the sources
+derived here hold for any profile. In particular $f'(0)$ is never set to zero, and
+`verify_appendix.ipynb` shows that it cancels out of the first-order amplitudes.
 
 Writing the metric as the identity plus corrections ordered by the number of
 derivatives of $\gamma$, the first-order current is eq. (4.1),

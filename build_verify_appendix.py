@@ -1,0 +1,572 @@
+#!/usr/bin/env python3
+"""
+Builds `verify_appendix.ipynb`.
+
+Edit this file, run it, and re-execute the notebook:
+
+    python3 build_verify_appendix.py
+    jupyter nbconvert --to notebook --execute --inplace verify_appendix.ipynb
+"""
+import nbformat as nbf
+
+nb = nbf.v4.new_notebook()
+C = []
+md = lambda s: C.append(nbf.v4.new_markdown_cell(s))
+co = lambda s: C.append(nbf.v4.new_code_cell(s.strip()))
+
+md(r"""
+# Verification of the Appendix A integrals
+
+`computing_M1.ipynb` derives the first-order geometric sources of Section 4 and takes them
+as far as the backscattering integrands. This notebook picks them up there and carries them
+through to the closed-form geometric amplitudes
+
+$$I^h_{HH}(-\vec k)=-\frac{4R_HK_0^2}{\sqrt{2K_0}}\,,\qquad
+I^h_{VV}(-\vec k)=\frac{4R_V}{T_V}k^2+\frac{2\epsilon_1(\epsilon_1-1)k^4}{K_1^2}T_V\,,$$
+
+eqs. (A.11) and (A.42) of the paper, checking every intermediate result of Appendix A along
+the way. Four things are verified, the last two of which are claims the paper makes
+explicitly and that nothing else in this repository tests:
+
+1. **Every intermediate expression** of Appendix A — the products (A.18), the moment
+   integrals (A.20) and (A.25), the boundary coefficients $c_1,c_2,c_3$ of (A.33)–(A.34),
+   the constant part (A.35) and the moment part (A.38) of $I_\perp$ — and the final
+   assemblies (A.11) and (A.42).
+2. **That the profile drops out.** The moments $\mathcal{F}_>(\pm2K_0)$ and
+   $\mathcal{F}_<(-2K_1)$ cancel between $I_\parallel$ and $I_\perp$ *coefficient by
+   coefficient*, eq. (A.40) — not merely in total, which is the stronger statement the
+   paper makes and the one that matters, since it is what makes the coordinate map a gauge
+   choice rather than a lucky sum.
+3. **That $f'(0)$ is immaterial**, eq. (A.3). The integration-by-parts table (A.2) is used
+   here with $f'(0)$ carried as a free symbol throughout, never set to zero, and the
+   $f'(0)$-dependence is shown to cancel between the two half-spaces in both channels.
+4. **The SPM closure** of Appendix A.3 symbolically, completing the numerical check already
+   in `results_visualization.ipynb`.
+
+Everything is done twice and independently: symbolically in $K_0,K_1,k,\epsilon_1$, and
+numerically by quadrature with an explicit profile $f$ that has $f'(0)\neq0$.
+
+Throughout, `k` is the *horizontal* wavenumber $k=k_i\sin\theta_i$, and $K_0,K_1$ are the
+vertical ones, $K_0^2=k_i^2-k^2$ and $K_1^2=\epsilon_1k_i^2-k^2$.
+""")
+
+# ------------------------------------------------------------------ 1 setup
+md("## 1 · Setup")
+
+co(r"""
+import sympy as sp
+from sympy import I, exp, sqrt, Symbol, Function, symbols, simplify, expand, factor
+
+z  = Symbol('zeta')                                   # the transformed coordinate
+K0, K1, k, ki, e1 = symbols('K_0 K_1 k k_i epsilon_1')
+fp0 = Symbol("f'(0)")            # the value the paper sets to zero; kept free here
+
+f = Function('f')                                     # the gauge profile
+
+# Fresnel amplitudes, Section 3 of the paper
+RH = (K0 - K1)/(K0 + K1);          TH = 1 + RH
+RV = (e1*K0 - K1)/(e1*K0 + K1);    TV = 1 - RV
+
+print("R_H =", RH, "   T_H =", sp.simplify(TH))
+print("R_V =", RV, "   T_V =", sp.simplify(TV))
+""")
+
+md(r"""
+### The moment algebra, eq. (A.2)
+
+All the profile dependence is carried by the two moments of eq. (A.1),
+
+$$\mathcal{F}_>(\lambda)=\int_0^\infty\! d\zeta\,f(\zeta)e^{\imath\lambda\zeta}\,,\qquad
+\mathcal{F}_<(\lambda)=\int_{-\infty}^0\! d\zeta\,f(\zeta)e^{\imath\lambda\zeta}\,,$$
+
+and the integrals of $f'$ and $f''$ reduce to them by parts. Using only $f(0)=1$ and
+$f(\pm\infty)=0$ — **not** $f'(0)=0$ — this is eq. (A.2):
+
+$$\int_0^\infty\! f'e^{\imath\lambda\zeta}=-1-\imath\lambda\mathcal{F}_>\,,\qquad
+\int_0^\infty\! f''e^{\imath\lambda\zeta}=-f'(0)+\imath\lambda-\lambda^2\mathcal{F}_>\,,$$
+$$\int_{-\infty}^0\! f'e^{\imath\lambda\zeta}=1-\imath\lambda\mathcal{F}_<\,,\qquad
+\int_{-\infty}^0\! f''e^{\imath\lambda\zeta}=+f'(0)-\imath\lambda-\lambda^2\mathcal{F}_<\,.$$
+
+Note that $f'(0)$ enters through the $f''$ integrals **only**: the $f'$ integrals are fixed
+by $f(0)=1$ and $f(\pm\infty)=0$ alone. That is the whole reason the cancellation of
+Section 6 below is possible.
+
+The three moments that actually occur are named `Fp`, `Fm` and `Fl`. The machinery below
+raises if any *other* moment appears, which is itself a check: the claim that
+$\lambda\in\{\pm2K_0\}$ above the interface and $\lambda=-2K_1$ below it exhausts the
+possibilities is enforced, not assumed.
+""")
+
+co(r"""
+Fp, Fm, Fl = symbols('F_+ F_- F_<')   # F_>(2K0), F_>(-2K0), F_<(-2K1)
+
+MOMENT = {('>',  2*K0): Fp,
+          ('>', -2*K0): Fm,
+          ('<', -2*K1): Fl}
+
+def _moment(region, lam):
+    lam = sp.simplify(lam)
+    for (r, l), sym in MOMENT.items():
+        if r == region and sp.simplify(l - lam) == 0:
+            return sym
+    if lam == 0:                       # F_>(0): allowed, but must never survive
+        return Symbol('F_0')
+    raise ValueError(f"unexpected moment: region {region}, lambda = {lam}")
+
+def _ibp(region, order, lam):
+    '''Eq. (A.2): the half-line integral of f^(order) e^{i lam zeta}.'''
+    F = _moment(region, lam)
+    if region == '>':
+        return [F, -1 - I*lam*F, -fp0 + I*lam - lam**2*F][order]
+    else:
+        return [F,  1 - I*lam*F, +fp0 - I*lam - lam**2*F][order]
+
+def _split(term):
+    '''Write a single product as  coeff * f^(n)(zeta) * exp(I*lam*zeta).
+
+    The exponential is recovered as the logarithmic derivative of what is left once the
+    f factor is divided out, so it does not matter how sympy chose to write it -- as
+    exp(-a*zeta) or as 1/exp(a*zeta), inside or outside a denominator.'''
+    fs = [a for a in term.atoms(sp.Derivative) if a.expr.func is f]
+    if not fs:      # a bare f(zeta); inside a Derivative it would be found twice
+        fs = [a for a in term.atoms(sp.core.function.AppliedUndef) if a.func is f]
+    if len(fs) != 1:
+        raise ValueError(f"term is not linear in f: {term}")
+    fa = fs[0]
+    order = fa.derivative_count if isinstance(fa, sp.Derivative) else 0
+
+    rest = sp.cancel(sp.together(term/fa))
+    lam  = sp.simplify(sp.diff(rest, z)/rest/I)
+    if lam.has(z):
+        raise ValueError(f"not a pure exponential: {term}")
+    coeff = sp.simplify(rest*sp.exp(-I*lam*z))
+    if coeff.has(z):
+        raise ValueError(f"unresolved zeta dependence in {term}")
+    return coeff, order, lam
+
+def integrate_half(expr, region):
+    '''Exact half-line integral of expr, linear in f and its derivatives, via (A.2).'''
+    out = sp.S.Zero
+    for term in sp.Add.make_args(sp.expand(expr)):
+        coeff, order, lam = _split(term)
+        out += coeff*_ibp(region, order, lam)
+    return sp.expand(out)
+
+print("moment algebra ready")
+""")
+
+md(r"""
+A first, small check of the machinery itself: $\int_0^\infty f'\,d\zeta=f(\infty)-f(0)=-1$
+and $\int_{-\infty}^0 f'\,d\zeta=+1$, with no $f'(0)$ and no moment — this is the
+$\lambda=0$ case, eq. (A.23), and it is the only place a constant survives an $f'$
+integration.
+""")
+
+co(r"""
+print("  int_0^oo  f' dz =", integrate_half(sp.Derivative(f(z), z), '>'))
+print("  int_-oo^0 f' dz =", integrate_half(sp.Derivative(f(z), z), '<'))
+print("  int_0^oo  f'' dz =", integrate_half(sp.Derivative(f(z), (z, 2)), '>'), "   (= -f'(0))")
+""")
+
+# ------------------------------------------------------------------ 2 HH
+md(r"""
+## 2 · HH channel — Appendix A.1
+
+The backscattering source of `computing_M1.ipynb` gives eq. (A.4),
+
+$$I_{HH}(-\vec k)=-\int_{-\infty}^{\infty}\! d\zeta\,F^\downarrow_K(\zeta)
+\Big[f''\Phi^{(0)}_{\vec k,\zeta}+2f'\Phi^{(0)}_{\vec k,\zeta\zeta}\Big]\,,$$
+
+with $F^\downarrow_K=\Phi^{(0)}_{\vec k}/\sqrt{2K_0}$ and
+$\Phi^{(0)}_{\vec k,\zeta\zeta}=-K_n^2\Phi^{(0)}_{\vec k}$ in each half-space. We build the
+integrand from the explicit $\Phi^{(0)}_{\vec k}$ of Section 3 rather than from the
+already-reduced form (A.5), so that the reduction is checked too.
+""")
+
+co(r"""
+Phi_gt = RH*exp(I*K0*z) + exp(-I*K0*z)          # zeta > 0
+Phi_lt = TH*exp(-I*K1*z)                        # zeta < 0
+
+def hh_integrand(Phi, Kn):
+    Fdown = Phi/sqrt(2*K0)
+    d1 = sp.diff(Phi, z)
+    d2 = -Kn**2*Phi                              # the unperturbed equation
+    return -Fdown*(sp.Derivative(f(z), (z, 2))*d1 + 2*sp.Derivative(f(z), z)*d2)
+
+I_HH_gt = sp.simplify(integrate_half(sp.expand(hh_integrand(Phi_gt, K0)), '>'))
+I_HH_lt = sp.simplify(integrate_half(sp.expand(hh_integrand(Phi_lt, K1)), '<'))
+
+print("  I^h_{<HH}  =", sp.simplify(sp.factor(I_HH_lt)))
+print("  I^h_{>HH}  =", sp.simplify(sp.factor(I_HH_gt)))
+""")
+
+md(r"""
+Two things to read off. The oscillatory moments have already cancelled *inside* each
+region: neither `F_+`, `F_-` nor `F_<` appears. And each region separately carries a term
+proportional to $f'(0)$ — the paper's remarks after (A.6) and (A.9). The lower half-space
+contributes $\imath K_1T_H^2f'(0)/\sqrt{2K_0}$ and nothing else.
+""")
+
+co(r"""
+for name, val in (("I^h_{<HH}", I_HH_lt), ("I^h_{>HH}", I_HH_gt)):
+    mom = [sp.simplify(sp.diff(val, m)) for m in (Fp, Fm, Fl)]
+    print(f"  {name}:  coefficients of (F_+, F_-, F_<) = {tuple(mom)}")
+    print(f"  {' '*len(name)}   coefficient of f'(0)       = "
+          f"{sp.factor(sp.simplify(sp.diff(val, fp0)))}")
+
+print("\n  quoted in the paper:")
+print("    I^h_{<HH} =", sp.simplify(I*K1*TH**2*fp0/sqrt(2*K0)),
+      "  match:", sp.simplify(I_HH_lt - I*K1*TH**2*fp0/sqrt(2*K0)) == 0)
+""")
+
+md(r"""
+### The sum, eq. (A.11)
+
+$f'(0)$ cancels between the two half-spaces. The identity responsible is the TE Fresnel
+relation $K_1T_H^2=K_0(1-R_H^2)$, which is nothing but the continuity of $\Phi^{(0)}$ *and*
+of $\Phi^{(0)}_{,\zeta}$ at $\zeta=0$ — see Section 6 below.
+""")
+
+co(r"""
+I_HH = sp.simplify(sp.expand(I_HH_gt + I_HH_lt))
+target_HH = -4*RH*K0**2/sqrt(2*K0)
+
+print("  I^h_HH            =", sp.simplify(sp.factor(I_HH)))
+print("  -4 R_H K0^2/sqrt(2K0) =", sp.simplify(sp.factor(target_HH)))
+print("  (A.11) residual   =", sp.simplify(I_HH - target_HH))
+print("  d I^h_HH / d f'(0) =", sp.simplify(sp.diff(I_HH, fp0)))
+print("  TE identity  K1 T_H^2 - K0 (1 - R_H^2) =", sp.simplify(K1*TH**2 - K0*(1 - RH**2)))
+""")
+
+# ------------------------------------------------------------------ 3 VV parallel
+md(r"""
+## 3 · VV channel, $I_\parallel$ — Appendix A.2
+
+$$I_\parallel(-\vec k)=-\frac{k^2}{k_i^2}\int_{-\infty}^{\infty}\! d\zeta\,
+F^\downarrow_{{\rm TM}\,K}(\zeta)\Big\{\big[2k^2f+f''\big]\Psi^{(0)}_{\vec k}
++2f'\Psi^{(0)}_{\vec k,\zeta}\Big\}$$
+
+with $\Psi^{(0)}_{\vec k}$ the auxiliary field of eq. (4.5) and $F^\downarrow_{{\rm TM}\,K}$
+the TM propagator of Section 3. We start from their explicit forms and first reproduce the
+products (A.18), which the paper quotes without derivation.
+""")
+
+co(r"""
+Psi_gt = -I*ki**2/K0*(RV*exp(I*K0*z) + exp(-I*K0*z))
+Psi_lt = -I*ki**2*e1/K1*TV*exp(-I*K1*z)
+Fv_gt  = (-RV*exp(I*K0*z) + exp(-I*K0*z))/TV
+Fv_lt  = exp(-I*K1*z)
+
+checks = [
+  ("F Psi   |_{z>0}", Fv_gt*Psi_gt,            I*ki**2/(K0*TV)*(RV**2*exp(2*I*K0*z) - exp(-2*I*K0*z))),
+  ("F Psi'  |_{z>0}", Fv_gt*sp.diff(Psi_gt,z), ki**2/TV*(-RV**2*exp(2*I*K0*z) + 2*RV - exp(-2*I*K0*z))),
+  ("F Psi   |_{z<0}", Fv_lt*Psi_lt,            -I*ki**2*e1*TV/K1*exp(-2*I*K1*z)),
+  ("F Psi'  |_{z<0}", Fv_lt*sp.diff(Psi_lt,z), -ki**2*e1*TV*exp(-2*I*K1*z)),
+]
+print("  eq. (A.18):")
+for name, lhs, rhs in checks:
+    print(f"    {name}   residual =", sp.simplify(sp.expand(lhs - rhs)))
+""")
+
+md("### $I_\\parallel$ region by region, eqs. (A.20) and (A.25)")
+
+co(r"""
+def par_integrand(Fv, Psi):
+    return -(k**2/ki**2)*Fv*((2*k**2*f(z) + sp.Derivative(f(z), (z, 2)))*Psi
+                             + 2*sp.Derivative(f(z), z)*sp.diff(Psi, z))
+
+I_par_lt = sp.simplify(integrate_half(sp.expand(par_integrand(Fv_lt, Psi_lt)), '<'))
+I_par_gt = sp.simplify(integrate_half(sp.expand(par_integrand(Fv_gt, Psi_gt)), '>'))
+
+A20 = 4*I*e1*k**4/(e1*K0 + K1)*Fl
+A25 = -2*I*k**4/(K0*TV)*(RV**2*Fp - Fm) + 4*RV*k**2/TV
+
+print("  (A.20) residual, at f'(0)=0 :", sp.simplify(sp.expand(I_par_lt.subs(fp0, 0) - A20)))
+print("  (A.25) residual, at f'(0)=0 :", sp.simplify(sp.expand(I_par_gt.subs(fp0, 0) - A25)))
+print()
+print("  f'(0) piece of I_par,< :", sp.simplify(sp.diff(I_par_lt, fp0)), "* f'(0)")
+print("  f'(0) piece of I_par,> :", sp.simplify(sp.diff(I_par_gt, fp0)), "* f'(0)")
+""")
+
+co(r"""
+I_par = sp.expand(I_par_lt + I_par_gt)
+print("  d I_par / d f'(0) =", sp.simplify(sp.diff(I_par, fp0)))
+print("  TM identity  e1 K0 T_V^2 - K1 (1 - R_V^2) =", sp.simplify(e1*K0*TV**2 - K1*(1 - RV**2)))
+
+I_par_const = sp.simplify(I_par.subs({Fp: 0, Fm: 0, Fl: 0, fp0: 0}))
+print("\n  (A.26) constant part =", sp.simplify(sp.factor(I_par_const)),
+      "   vs  4 R_V k^2/T_V =", sp.simplify(sp.factor(4*RV*k**2/TV)))
+print("  residual =", sp.simplify(I_par_const - 4*RV*k**2/TV))
+""")
+
+# ------------------------------------------------------------------ 4 VV perp
+md(r"""
+## 4 · VV channel, $I_\perp$ — Appendix A.2
+
+After the integration by parts that cancels the $\delta(\zeta)$ from the jump of $g$, and
+with $S\equiv[\Psi^{(0)}_{\vec k}]^2$, eq. (A.29) is
+
+$$I_\perp=\frac{2k^4}{k_i^4T_V}\int_{-\infty}^{\infty}\frac{d\zeta}{\epsilon_n(\zeta)}
+\Big[f'S+\tfrac{f}{2}S'\Big]
+=\frac{k^4}{k_i^4T_V}\Big\{\int_0^\infty\! f'S+\frac1{\epsilon_1}\int_{-\infty}^0\! f'S
+-S(0)\frac{\epsilon_1-1}{\epsilon_1}\Big\}\,.$$
+
+Note that no $f''$ appears anywhere: $I_\perp$ is independent of $f'(0)$ from the outset.
+We verify the rearrangement itself, then $S(0)$ of (A.32) and the boundary coefficients.
+""")
+
+co(r"""
+S_gt, S_lt = sp.expand(Psi_gt**2), sp.expand(Psi_lt**2)
+
+# the rearrangement leading to (A.29): the 1/eps_n(zeta) weight, split at the interface
+lhs = (2*k**4/(ki**4*TV))*(
+        integrate_half(sp.expand(sp.Derivative(f(z),z)*S_gt + f(z)/2*sp.diff(S_gt,z)), '>')
+      + integrate_half(sp.expand(sp.Derivative(f(z),z)*S_lt + f(z)/2*sp.diff(S_lt,z)), '<')/e1)
+
+S0 = sp.simplify(S_gt.subs(z, 0))
+print("  S(0) from above =", sp.simplify(sp.factor(S0)))
+print("  S(0) from below =", sp.simplify(sp.factor(S_lt.subs(z, 0))), "   (Psi continuous)")
+print("  (A.32) residual =", sp.simplify(S0 + 4*e1**2*ki**4/(e1*K0 + K1)**2))
+
+rhs = (k**4/(ki**4*TV))*(
+        integrate_half(sp.expand(sp.Derivative(f(z),z)*S_gt), '>')
+      + integrate_half(sp.expand(sp.Derivative(f(z),z)*S_lt), '<')/e1
+      - S0*(e1 - 1)/e1)
+print("  (A.29) rearrangement residual =", sp.simplify(sp.expand(lhs - rhs)))
+I_perp = sp.expand(rhs)
+""")
+
+md(r"""
+### The boundary coefficients $c_1,c_2,c_3$ and the identity (A.34)
+
+$S'$ is purely oscillatory in each region — the constant cross term $2R_V$ of $S$ is
+annihilated by the derivative — so $\int fS'$ contributes only moments, and the whole
+profile-independent content of the two bulk integrals is their boundary terms
+$c_1=-S(0)$ and $c_2=S(0)/\epsilon_1$. With $c_3=-S(0)(\epsilon_1-1)/\epsilon_1$ already
+isolated, $c_1+c_2=c_3$, so that the constant part of $I_\perp$ is **twice** the explicit
+boundary term, not that term itself.
+""")
+
+co(r"""
+c1 = sp.simplify(integrate_half(sp.expand(sp.Derivative(f(z),z)*S_gt), '>').subs({Fp:0, Fm:0}))
+c2 = sp.simplify(integrate_half(sp.expand(sp.Derivative(f(z),z)*S_lt), '<').subs({Fl:0})/e1)
+c3 = -S0*(e1 - 1)/e1
+
+print("  c_1 =", sp.simplify(sp.factor(c1)), "   ( = -S(0):", sp.simplify(c1 + S0) == 0, ")")
+print("  c_2 =", sp.simplify(sp.factor(c2)), "   ( =  S(0)/e1:", sp.simplify(c2 - S0/e1) == 0, ")")
+print("  c_3 =", sp.simplify(sp.factor(c3)))
+print("  (A.34)  c_1 + c_2 - c_3 =", sp.simplify(sp.expand(c1 + c2 - c3)))
+
+I_perp_const = sp.simplify(I_perp.subs({Fp: 0, Fm: 0, Fl: 0}))
+A35 = 2*e1*(e1 - 1)*k**4*TV/K1**2
+print("\n  I_perp|const =", sp.simplify(sp.factor(I_perp_const)))
+print("  (A.35) residual =", sp.simplify(sp.expand(I_perp_const - A35)))
+""")
+
+# ------------------------------------------------------------------ 5 assembly
+md(r"""
+## 5 · The profile cancels coefficient by coefficient — eq. (A.40)
+
+This is the claim that makes the coordinate map a gauge choice. It is *not* enough that
+$I_\parallel|_f+I_\perp|_f$ vanish in total: the paper states that the coefficients of
+$\mathcal{F}_>(2K_0)$, $\mathcal{F}_>(-2K_0)$ and $\mathcal{F}_<(-2K_1)$ match one by one,
+so that no cancellation between different moments — that is, between different profiles —
+is being relied on. We check each separately.
+""")
+
+co(r"""
+A39_par = (I*k**4/(K0*K1)*(-(e1*K0 - K1)**2/(e1*K0 + K1)*Fp + (e1*K0 + K1)*Fm)
+           + 4*I*e1*k**4/(e1*K0 + K1)*Fl)
+
+print("  moment          coeff in I_par          coeff in I_perp          sum")
+for m, nm in ((Fp, 'F_>( 2K0)'), (Fm, 'F_>(-2K0)'), (Fl, 'F_<(-2K1)')):
+    a = sp.simplify(sp.factor(sp.diff(I_par,  m)))
+    b = sp.simplify(sp.factor(sp.diff(I_perp, m)))
+    q = sp.simplify(sp.diff(A39_par, m))
+    print(f"  {nm}   sum = {sp.simplify(a + b)}      matches (A.39): {sp.simplify(a - q) == 0}")
+
+print("\n  I_perp|_f + I_par|_f =",
+      sp.simplify(sum((sp.diff(I_par, m) + sp.diff(I_perp, m))*m for m in (Fp, Fm, Fl))))
+print("  stray F_0 moment in either piece:",
+      I_par.has(Symbol('F_0')) or I_perp.has(Symbol('F_0')))
+""")
+
+md("### The exact VV amplitude, eq. (A.42)")
+
+co(r"""
+I_VV = sp.simplify(sp.expand(I_par + I_perp))
+A42a = 4*RV/TV*k**2 + 2*e1*(e1 - 1)*k**4/K1**2*TV
+A42b = 2*k**2*(e1**2*K0**2 - K1**2 + 2*e1*(e1 - 1)*k**2)/(K1*(e1*K0 + K1))
+
+print("  I^h_VV =", sp.simplify(sp.factor(I_VV)))
+print("  (A.42) first form  residual =", sp.simplify(sp.expand(I_VV - A42a)))
+print("  (A.42) second form residual =", sp.simplify(sp.expand(A42a - A42b)))
+print("  d I^h_VV / d f'(0) =", sp.simplify(sp.diff(I_VV, fp0)))
+print("  I^h_VV still contains a moment:", any(I_VV.has(m) for m in (Fp, Fm, Fl)))
+""")
+
+# ------------------------------------------------------------------ 6 f'(0)
+md(r"""
+## 6 · Why $f'(0)$ drops out — eq. (A.3)
+
+Both cancellations above are the same statement. The profile enters through one term
+proportional to $f''$, of the form $\int d\zeta\,f''B$, plus terms in $f$ and $f'$ alone
+that carry no $f'(0)$. Integrating that term by parts once in each half-space,
+
+$$\int_{-\infty}^{\infty}\! d\zeta\,f''B=-f'(0)\big[B(0^+)-B(0^-)\big]
+-\int_{-\infty}^{\infty}\! d\zeta\,f'B'\,,$$
+
+so the whole dependence on $f'(0)$ is the **jump of $B$ at the interface**. In HH,
+$B=F^\downarrow_K\Phi^{(0)}_{\vec k,\zeta}$, continuous because the TE matching conditions
+make both $\Phi^{(0)}_{\vec k}$ and $\Phi^{(0)}_{\vec k,\zeta}$ continuous. In VV,
+$B=F^\downarrow_{{\rm TM}\,K}\Psi^{(0)}_{\vec k}$, continuous because both factors are
+separately continuous — it is $\Psi^{(0)}_{\vec k,\zeta}$ that jumps, and it never
+multiplies $f''$.
+
+So $f'(0)$ is not a condition on the map at all: it is fixed by the zeroth-order matching
+conditions of each polarization. Only $f(0)=1$ and $f(\pm\infty)=0$ are ever used.
+""")
+
+co(r"""
+B_HH_gt = Phi_gt/sqrt(2*K0)*sp.diff(Phi_gt, z)
+B_HH_lt = Phi_lt/sqrt(2*K0)*sp.diff(Phi_lt, z)
+B_VV_gt, B_VV_lt = Fv_gt*Psi_gt, Fv_lt*Psi_lt
+
+for nm, bg, bl, idn in (("HH", B_HH_gt, B_HH_lt, K1*TH**2 - K0*(1 - RH**2)),
+                        ("VV", B_VV_gt, B_VV_lt, e1*K0*TV**2 - K1*(1 - RV**2))):
+    jump = sp.simplify(sp.factor(sp.expand(bg.subs(z, 0) - bl.subs(z, 0))))
+    print(f"  {nm}:  B(0+) - B(0-) = {jump}      Fresnel identity = {sp.simplify(idn)}")
+""")
+
+# ------------------------------------------------------------------ 7 SPM
+md(r"""
+## 7 · SPM closure — Appendix A.3
+
+`results_visualization.ipynb` checks
+$\widehat{E}^{(1)}_{VV}=-E^{(1)}_{VV}|_{\rm SPM}$ numerically; here it is symbolic. The
+comparison needs the incident normalisation: eqs. (3.9)–(3.10) fix $E^{inc}_x=1$, hence
+$|\vec E^{inc}|=k_i/K_0\neq1$, while the SPM kernel refers to a unit-amplitude wave.
+""")
+
+co(r"""
+EVV_hat = -(K0*TV/(2*k**2))*I_VV                      # unit incident amplitude
+EVV_spm = 2*K0*(e1 - 1)/(e1*K0 + K1)**2*(K1**2 + e1*k**2)
+
+closure = sp.factor(sp.cancel(sp.expand(EVV_hat + EVV_spm)))
+print("  E_VV_hat + E_VV_spm, off shell =", closure)
+
+# the paper reduces the closure to this bracket, rational in K0, K1, k and e1 ...
+bracket = sp.expand(e1**2*K0**2 - K1**2 + 2*e1*(e1 - 1)*k**2 - (e1 - 1)*(K1**2 + e1*k**2))
+print("  bracket to be checked          =", sp.factor(bracket))
+
+# ... which vanishes on shell.  Eliminating k_i between K0^2 = ki^2 - k^2 and
+# K1^2 = e1 ki^2 - k^2 gives the single relation  K1^2 = e1 K0^2 + (e1 - 1) k^2.
+on_shell = {K1**2: e1*K0**2 + (e1 - 1)*k**2}
+num, den = sp.fraction(sp.cancel(closure))
+print("  bracket on shell               =", sp.simplify(bracket.subs(on_shell)))
+print("  closure numerator on shell     =", sp.simplify(sp.expand(num).subs(on_shell)))
+print("  (denominator is", sp.factor(den), ", nonzero)")
+""")
+
+# ------------------------------------------------------------------ 8 numeric
+md(r"""
+## 8 · Independent numerical check, with $f'(0)\neq0$
+
+Nothing above integrated anything: the moment algebra of Section 1 replaced every integral
+by (A.2). Here the integrals are done the other way, by quadrature, with an explicit
+profile chosen to have a non-zero slope at the interface,
+
+$$f(\zeta)=\big[1+f'(0)\,\zeta\big]\,e^{-\zeta^2/L^2}\,,$$
+
+which satisfies $f(0)=1$, $f(\pm\infty)=0$ and is $C^1$ at $\zeta=0$, but **not**
+$f'(0)=0$. The closed forms (A.11) and (A.42) should come out unchanged, for real and
+complex $\epsilon_1$ alike.
+""")
+
+co(r"""
+import numpy as np
+from scipy.integrate import quad
+
+def cquad(g, a, b):
+    return (quad(lambda t: g(t).real, a, b, limit=400)[0]
+            + 1j*quad(lambda t: g(t).imag, a, b, limit=400)[0])
+
+def amplitudes(theta_deg, eps1, slope, L=1.7, ki_=1.0):
+    th = np.deg2rad(theta_deg)
+    kk, KK0 = ki_*np.sin(th), ki_*np.cos(th)
+    KK1 = np.sqrt(eps1*ki_**2 - kk**2 + 0j)
+    KK1 = KK1 if KK1.imag >= 0 else -KK1            # Im K1 >= 0, decaying below
+    rH = (KK0 - KK1)/(KK0 + KK1); tH = 1 + rH
+    rV = (eps1*KK0 - KK1)/(eps1*KK0 + KK1); tV = 1 - rV
+
+    F   = lambda u: (1 + slope*u)*np.exp(-(u/L)**2)
+    F1  = lambda u: (slope - 2*u/L**2*(1 + slope*u))*np.exp(-(u/L)**2)
+    F2  = lambda u: (-2/L**2*(1 + slope*u) - 4*u*slope/L**2
+                     + 4*u**2/L**4*(1 + slope*u))*np.exp(-(u/L)**2)
+
+    # ---- HH, eq. (A.4)
+    ph_g = lambda u: rH*np.exp(1j*KK0*u) + np.exp(-1j*KK0*u)
+    ph_l = lambda u: tH*np.exp(-1j*KK1*u)
+    d_g  = lambda u: 1j*KK0*(rH*np.exp(1j*KK0*u) - np.exp(-1j*KK0*u))
+    d_l  = lambda u: -1j*KK1*tH*np.exp(-1j*KK1*u)
+    hh = (cquad(lambda u: -ph_g(u)/np.sqrt(2*KK0)*(F2(u)*d_g(u) - 2*F1(u)*KK0**2*ph_g(u)), 0, 12*L)
+        + cquad(lambda u: -ph_l(u)/np.sqrt(2*KK0)*(F2(u)*d_l(u) - 2*F1(u)*KK1**2*ph_l(u)), -12*L, 0))
+
+    # ---- VV, I_par + I_perp
+    ps_g  = lambda u: -1j*ki_**2/KK0*(rV*np.exp(1j*KK0*u) + np.exp(-1j*KK0*u))
+    ps_l  = lambda u: -1j*ki_**2*eps1/KK1*tV*np.exp(-1j*KK1*u)
+    dps_g = lambda u: ki_**2*(rV*np.exp(1j*KK0*u) - np.exp(-1j*KK0*u))
+    dps_l = lambda u: -ki_**2*eps1*tV*np.exp(-1j*KK1*u)
+    fv_g  = lambda u: (-rV*np.exp(1j*KK0*u) + np.exp(-1j*KK0*u))/tV
+    fv_l  = lambda u: np.exp(-1j*KK1*u)
+
+    par = (cquad(lambda u: -(kk**2/ki_**2)*fv_g(u)*((2*kk**2*F(u) + F2(u))*ps_g(u)
+                                                    + 2*F1(u)*dps_g(u)), 0, 12*L)
+         + cquad(lambda u: -(kk**2/ki_**2)*fv_l(u)*((2*kk**2*F(u) + F2(u))*ps_l(u)
+                                                    + 2*F1(u)*dps_l(u)), -12*L, 0))
+    pre = 2*kk**4/(ki_**4*tV)
+    per = (cquad(lambda u: pre*(F1(u)*ps_g(u)**2 + F(u)*ps_g(u)*dps_g(u)), 0, 12*L)
+         + cquad(lambda u: pre/eps1*(F1(u)*ps_l(u)**2 + F(u)*ps_l(u)*dps_l(u)), -12*L, 0))
+
+    hh_exact = -4*rH*KK0**2/np.sqrt(2*KK0)
+    vv_exact = 4*rV/tV*kk**2 + 2*eps1*(eps1 - 1)*kk**4/KK1**2*tV
+    return abs(hh - hh_exact), abs(par + per - vv_exact)
+
+print(f"  {'theta':>6} {'eps1':>12} {chr(39)+'f(0)':>7}   {'|dI_HH|':>10} {'|dI_VV|':>10}")
+worst = 0.0
+for th in (20., 35., 55., 70.):
+    for eps1 in (4.0, 15 + 3j):
+        for slope in (0.0, 0.8, -1.5):
+            a, b = amplitudes(th, eps1, slope)
+            worst = max(worst, a, b)
+            print(f"  {th:6.0f} {str(eps1):>12} {slope:7.2f}   {a:10.2e} {b:10.2e}")
+print(f"\n  worst residual over the grid: {worst:.2e}")
+""")
+
+md(r"""
+---
+
+### Summary
+
+| Claim | Where | Verified |
+|---|---|---|
+| Products $F^\downarrow_{\rm TM}\Psi^{(0)}$ | (A.18) | §3 |
+| $I_\parallel$ region by region | (A.20), (A.25) | §3 |
+| $S(0)$, $c_1+c_2=c_3$, $I_\perp\vert_{\rm const}$ | (A.32)–(A.35) | §4 |
+| Moments cancel **coefficient by coefficient** | (A.39), (A.40) | §5 |
+| $I^h_{HH}$, $I^h_{VV}$ closed forms | (A.11), (A.42) | §2, §5 |
+| $f'(0)$ drops out, jump of $B$ vanishes | (A.3) | §2, §3, §6 |
+| SPM closure | (A.52) | §7 |
+| All of the above, by quadrature, with $f'(0)\neq0$ | — | §8 |
+
+Only $f(0)=1$ and $f(\pm\infty)=0$ are used anywhere. The value of $f'(0)$ is carried as a
+free symbol from the integration-by-parts table (A.2) all the way to the final amplitudes,
+and drops out of both.
+""")
+
+nb["cells"] = C
+nb["metadata"] = {"kernelspec": {"display_name": "Python 3", "language": "python",
+                                 "name": "python3"},
+                  "language_info": {"name": "python", "version": "3.12"}}
+nbf.write(nb, "verify_appendix.ipynb")
+print(f"wrote verify_appendix.ipynb  ({len(C)} cells)")

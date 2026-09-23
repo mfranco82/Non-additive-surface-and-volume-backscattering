@@ -68,7 +68,13 @@ field = RegularGridInterpolator((z, x), eps, bounds_error=False,
 
 
 def f_profile(zz, d=0.17):
-    """Gauge profile: f(0)=1, f'(0)=f''(0)=0, f(+-inf)=0."""
+    """A profile satisfying the gauge conditions f(0)=1, f(+-inf)=0.
+
+    This particular choice also has f'(0) = f''(0) = 0, which keeps the constant-zeta
+    curves of the figure tangent to the interface. That is a choice, not a requirement:
+    the first-order amplitudes are independent of f'(0) -- see eq. (A.3) of the paper
+    and verify_appendix.ipynb.
+    """
     return np.exp(-(zz / d) ** 4)
 
 
