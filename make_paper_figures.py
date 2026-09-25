@@ -84,7 +84,8 @@ def contributions(theta, ki=Ki, **kw):
     IVV = 4 * RV / TV * k**2 + 2 * eps1 * (eps1 - 1) * k**4 / K1**2 * TV
 
     Wh = s**2 * l**2 / (4 * np.pi) * np.exp(-(k * l)**2)
-    Om_e = seps**2 * lr**2 / (4 * np.pi) * np.exp(-(k * lr)**2) * lv / (1 + 2 * K1p * lv)
+    lvt = lv / (1 + 2 * K1pp * lv)   # effective vertical correlation length
+    Om_e = seps**2 * lr**2 / (4 * np.pi) * np.exp(-(k * lr)**2) * lvt / (1 + (2 * K1p * lvt) ** 2)
     Om_he = (rho0 * seps * s * Lr**2 / (4 * np.pi) * np.exp(-(k * Lr)**2)
              * Lv / (1 + 2 * Lv * (K1pp + 1j * K1p)))
 

@@ -18,9 +18,10 @@ maps the rough boundary onto a flat interface and converts the geometric roughne
 sources of the same Helmholtz equation as the dielectric fluctuations, so that both mechanisms
 and their interference follow from a single calculation.
 
-This repository contains the symbolic derivation of the first-order sources, the verification
-of the Appendix A integrals, the numerical evaluation of the resulting cross-sections, and the
-scripts that produce every figure in the paper.
+This repository contains the symbolic derivation of the first-order sources, the derivation
+and verification of the closed-form geometric amplitudes `I_HH` and `I_VV` quoted in the paper,
+the numerical evaluation of the resulting cross-sections, and the scripts that produce every
+figure in the paper.
 
 ---
 
@@ -30,7 +31,7 @@ scripts that produce every figure in the paper.
 |---|---|
 | `computing_M1.ipynb` | Symbolic derivation of the first-order geometric sources `M¹ₐ` — eqs. (4.2)–(4.4) and (4.6)–(4.8) of the paper, and their backscattering limit. |
 | `build_computing_M1.py` | Source of the notebook above. Edit this, not the `.ipynb`. |
-| `verify_appendix.ipynb` | Verification of Appendix A: every intermediate integral, the coefficient-by-coefficient cancellation of the profile, the independence from `f′(0)`, and the SPM closure — symbolically, and again by quadrature with an explicit profile. |
+| `verify_appendix.ipynb` | Self-contained derivation of the geometric amplitudes `I_HH` and `I_VV`, which the paper quotes without deriving: every intermediate integral, the coefficient-by-coefficient cancellation of the profile, the independence from `f′(0)`, and the SPM closure — symbolically, and again by quadrature with an explicit profile. |
 | `build_verify_appendix.py` | Source of the notebook above. |
 | `results_visualization.ipynb` | Exploration of the physics: the three contributions, the departure from additivity, the two conditions under which the coupling matters, the retrieval bias. |
 | `build_notebook.py` | Source of the notebook above. |
@@ -92,7 +93,7 @@ result to momentum space, and specialises it to backscattering. The output is, i
 * **TE** — eqs. (4.2), (4.3) and (4.4) of the paper, built on `Φ⁰` and its normal derivatives;
 * **TM** — eqs. (4.6), (4.7) and (4.8);
 * their **backscattering limit** (`pₓ = −k`, `p_y = 0`), which is the two-term integrand that
-  Appendix A evaluates exactly, and from which `I_HH` and `I_VV` follow.
+  `verify_appendix.ipynb` evaluates exactly, and from which `I_HH` and `I_VV` follow.
 
 One feature of the result is worth pointing out. The TM sources depend on the zeroth-order field
 **only** through the combination `Ψ⁰ = ∂_ζ E⁰_x − ∂_x E⁰_ζ`, which is proportional to the incident
@@ -141,7 +142,8 @@ Two conventions matter for reading the code against the paper.
   `f″`, whose integration by parts leaves it multiplying the jump at `ζ = 0` of a quantity that the
   zeroth-order matching conditions make continuous — in HH because TE makes both `Φ⁰` and `Φ⁰_,ζ`
   continuous, in VV because `F↓_TM` and `Ψ⁰` are separately continuous. So it cancels identically,
-  for every angle and every `ϵ1`; this is eq. (A.3) of the paper. Nothing here assumes `f′(0) = 0`:
+  for every angle and every `ϵ1`; the paper states this in its Section 2 and points here for the
+  proof. Nothing here assumes `f′(0) = 0`:
   `computing_M1.ipynb` carries `f` as a generic function throughout, and `verify_appendix.ipynb`
   carries `f′(0)` as a free symbol from the integration-by-parts table all the way to the final
   amplitudes, and then checks the result again by quadrature with a profile that has `f′(0) ≠ 0`.
